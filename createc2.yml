@@ -8,7 +8,7 @@
     instance_type: t2.micro
     image: ami-0767046d1677be5a0
     region: eu-central-1
-    count: 1
+    count: 2
     security_group: AnSecGroup
     aws_access_key:   #указать ключ юзера с админскими правами на авс
     aws_secret_key:   #указать секретный ключ от того же юзверя
@@ -62,17 +62,82 @@
         name: "{{ ec2.instances[0].public_ip }}"
         groups: staging
         ansible_ssh_private_key_file: ./keys/test1.pem
+    - name: Add new instance production to host group
+        add_host:
+          name: "{{ ec2.instances[1].public_ip }}"
+          groups: prod
+          ansible_ssh_private_key_file: ./keys/test1.pem
 
-
-
-
-- name: try to do smth
+- name: Prepare Staging environment
   hosts: staging
   remote_user: ubuntu
   become: yes
+
   tasks:
-    - name: install git
+    - name: ensure default JDK package is present
+      apt:
+       name: default-jdk
+       state: present
+       update_cache: yes
+
+    - name: ensure git package is present
+      apt:
+       name: git
+       state: present
+
+    - name: install maven
+      apt:
+       name: maven
+       state: present
+
+    - name: clone boxfuse to the vm
       git:
        repo: 'https://github.com/boxfuse/boxfuse-sample-java-war-hello.git'
        dest: /home/ubuntu/boxfuse
        clone: yes
+
+    - name: Build Webapp
+      command: mvn -f /home/ubuntu/boxfuse/pom.xml clean package
+
+    - name: upload webapp to S3 bucket
+      aws_s3:
+        bucket: mybacket13.test13.com
+        object: /hello-1.0.war
+        src: /home/ubuntu/boxfuse/target/hello-1.0.war
+        mode: put
+        overwrite: yes
+
+- name: Prepare Production environment
+  hosts: prod
+  remote_user: ubuntu
+  become: yes
+
+  tasks:
+    - name: Install default JRE package
+      apt:
+       name: default-jre
+       state: present
+       update_cache: yes
+
+    - name: Install TOMCAT9 package
+      apt:
+       name: tomcat9
+       state: present
+
+    - name: Make Sure that TOMCAT service is started
+      service:
+       name: tomcat9
+       state: started
+
+    - name: Ensure Webapp artifact is downloaded from S3 bucket
+      aws_s3:
+        bucket: mybacket13.test13.com
+        object: /hello-1.0.war
+        dest: /vars/lib/tomcat9/webapps/hello-1.0.war
+        mode: get
+
+    - name: delete object from S3 bucket
+      aws_s3:
+        bucket: mybacket13.test13.com
+        object: /hello-1.0.war
+        mode: delobj
