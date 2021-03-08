@@ -17,7 +17,7 @@
     - name: create a security group with 22,80,8080 ports open to all ethernet
       ec2_group:
         name: "{{ security_group }}"
-        description: ansible sec group with ports 22,80,443 open
+        description: ansible sec group with ports 22,80,8080 open
         region: "{{ region }}"
         rules:
           - proto: tcp
@@ -56,3 +56,23 @@
 
     - name: printing all ec2 variables
       debug: var=ec2
+
+    - name: Add new instance Staging to host group
+      add_host:
+        name: "{{ ec2.instances[0].public_ip }}"
+        groups: staging
+        ansible_ssh_private_key_file: ./keys/test1.pem
+
+
+
+
+- name: try to do smth
+  hosts: staging
+  remote_user: ubuntu
+  become: yes
+  tasks:
+    - name: install git
+      git:
+       repo: 'https://github.com/boxfuse/boxfuse-sample-java-war-hello.git'
+       dest: /home/ubuntu/boxfuse
+       clone: yes
